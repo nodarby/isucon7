@@ -413,7 +413,7 @@ func getMessage(c echo.Context) error {
 
 func queryChannels() ([]int64, error) {
 	res := []int64{}
-	err := db.Select(&res, "SELECT * FROM channel")
+	err := db.Select(&res, "SELECT id FROM channel")
 	return res, err
 }
 
