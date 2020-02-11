@@ -4,6 +4,7 @@ import (
 	crand "crypto/rand"
 	"crypto/sha1"
 	"database/sql"
+	//"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"html/template"
@@ -13,6 +14,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -47,7 +49,7 @@ func init() {
 	crand.Read(seedBuf)
 	rand.Seed(int64(binary.LittleEndian.Uint64(seedBuf)))
 
-	db_host := os.Getenv("ISUBATA_DB_HOST")
+	db_host := "localhost"
 	if db_host == "" {
 		db_host = "127.0.0.1"
 	}
@@ -55,11 +57,11 @@ func init() {
 	if db_port == "" {
 		db_port = "3306"
 	}
-	db_user := os.Getenv("ISUBATA_DB_USER")
+	db_user := "isucon"
 	if db_user == "" {
 		db_user = "root"
 	}
-	db_password := os.Getenv("ISUBATA_DB_PASSWORD")
+	db_password := "isucon"
 	if db_password != "" {
 		db_password = ":" + db_password
 	}
@@ -662,7 +664,20 @@ func postProfile(c echo.Context) error {
 	}
 
 	if avatarName != "" && len(avatarData) > 0 {
-		_, err := db.Exec("INSERT INTO image (name, data) VALUES (?, ?)", avatarName, avatarData)
+
+		// DONE 画像をファイルとして保存
+		currentDir, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+
+		filePath := path.Join(currentDir, "/image/assets/", avatarName)
+		err = ioutil.WriteFile(filePath, avatarData, 0644)
+		if err != nil {
+			return err
+		}
+
+		_, err = db.Exec("INSERT INTO image (name, data) VALUES (?, ?)", avatarName, avatarData)
 		if err != nil {
 			return err
 		}
@@ -685,11 +700,55 @@ func postProfile(c echo.Context) error {
 func getIcon(c echo.Context) error {
 	var name string
 	var data []byte
-	err := db.QueryRow("SELECT name, data FROM image WHERE name = ?",
+
+	//画像がファイルとして存在する場合には利用
+	currentDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	filePath := path.Join(currentDir, "/image/assets/", c.Param("file_name"))
+
+	if _, err = os.Stat(filePath); err == nil {
+
+		bytes, err := ioutil.ReadFile(filePath)
+		if err != nil {
+			return err
+		}
+
+		//encodedData := base64.StdEncoding.EncodeToString(bytes)
+
+		mime := ""
+		name = c.Param("file_name")
+		switch true {
+		case strings.HasSuffix(name, ".jpg"), strings.HasSuffix(name, ".jpeg"):
+			mime = "image/jpeg"
+		case strings.HasSuffix(name, ".png"):
+			mime = "image/png"
+		case strings.HasSuffix(name, ".gif"):
+			mime = "image/gif"
+		default:
+			return echo.ErrNotFound
+		}
+
+		return c.Blob(http.StatusOK, mime, bytes)
+	}
+
+
+	err = db.QueryRow("SELECT name, data FROM image WHERE name = ?",
 		c.Param("file_name")).Scan(&name, &data)
 	if err == sql.ErrNoRows {
 		return echo.ErrNotFound
 	}
+	if err != nil {
+		return err
+	}
+
+	// DONE 画像をファイルとして保存
+	if err != nil {
+		return err
+	}
+
+	err = ioutil.WriteFile(filePath, data, 0644)
 	if err != nil {
 		return err
 	}
