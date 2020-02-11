@@ -1,4 +1,4 @@
 /pkg/
 /isubata
-/image
+/image/assets/*
 /src/isubata/vendor
