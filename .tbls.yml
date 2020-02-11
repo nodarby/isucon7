@@ -1,0 +1,8 @@
+# .tbls.yml
+
+# DSN (Database Source Name) to connect database
+dsn: mysql://isucon:isucon@163.44.164.214/isubata
+
+# Path to generate document
+# Default is `dbdoc`
+docPath: doc/schema
