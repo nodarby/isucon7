@@ -411,10 +411,12 @@ func getMessage(c echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
+
 func queryChannels() ([]int64, error) {
+
 	res := []int64{}
 	err := db.Select(&res, "SELECT id FROM channel")
-	return res, err
+	return res , err
 }
 
 func queryHaveRead(userID, chID int64) (int64, error) {
@@ -438,6 +440,11 @@ func queryHaveRead(userID, chID int64) (int64, error) {
 	return h.MessageID, nil
 }
 
+type getterChannels struct {
+	ChannelID int64     `db:"channel_id"`
+	MessageID int64     `db:"message_id"`
+}
+
 func fetchUnread(c echo.Context) error {
 	userID := sessUserID(c)
 	if userID == 0 {
@@ -446,6 +453,9 @@ func fetchUnread(c echo.Context) error {
 
 	time.Sleep(time.Second)
 
+	// N+1問題箇所と結合 (作成したがむしろスコアが下がった？)
+	//rows, err := db.Query("SELECT haveread.channel_id, haveread.message_id FROM channel INNER JOIN haveread ON channel.id = haveread.channel_id")
+
 	channels, err := queryChannels()
 	if err != nil {
 		return err
@@ -453,19 +463,30 @@ func fetchUnread(c echo.Context) error {
 
 	resp := []map[string]interface{}{}
 
+	//for rows.Next() {
+
 	for _, chID := range channels {
+
+		// N+1問題箇所　上記のSQLと結合
 		lastID, err := queryHaveRead(userID, chID)
-		if err != nil {
-			return err
-		}
+
+		/*
+		m := getterChannels{}
+		rows.Scan(&m.ChannelID, &m.MessageID)
+		chID := m.ChannelID
+		lastID := m.MessageID
+		 */
 
 		var cnt int64
 		if lastID > 0 {
+
+			// COUNT(*) 部分を、channelテーブルにメッセージ数を記録することで改善
 			err = db.Get(&cnt,
 				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id",
 				chID, lastID)
 		} else {
 			err = db.Get(&cnt,
+				// COUNT(*) 部分を、channelテーブルにメッセージ数を記録することで改善
 				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?",
 				chID)
 		}
